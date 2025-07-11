@@ -1,0 +1,34 @@
+AT_SIGMA = 1e-2
+BEARING_SIGMA = 0.01 # 0.5 # 0.01
+
+SENSOR_VAR = AT_SIGMA * AT_SIGMA
+BEARING_VAR = BEARING_SIGMA * BEARING_SIGMA
+
+SIM_FLAG = 5 # 1-PNG pursuing 2-PNG intercept 3-cross motion (refs) 4-cross 5-parallel 6-parallel (no relative motion)
+
+ITER_NUM = 1
+
+STEP = 0.1
+DURATION = 2000
+
+DATA_RECORDER = False
+
+PRINT_TIME = True
+
+DRAW_BOUNDS = True
+
+T_ITER = 1
+
+algorithms = ['ekf', 'ideal', 'msc_ideal', 'msc', 'tekf']
+
+TIME_MARK = '2025-06-10 16:55:39' # 2
+TIME_MARK = '2025-06-11 10:32:54' # 6
+TIME_MARK = '2025-06-11 10:51:54' # 5
+TIME_MARK = '2025-06-10 16:28:59' # 4
+TIME_MARK = '2025-06-10 16:38:52' 
+TIME_MARK = '2025-06-11 10:41:52'
+TIME_MARK = '2025-06-10 16:35:35' # 3
+TIME_MARK = '2025-06-12 12:16:47'
+TIME_MARK = '2025-06-12 21:27:01'
+TIME_MARK = '2025-06-12 21:25:35'
+TIME_MARK = '2025-06-12 23:11:33'

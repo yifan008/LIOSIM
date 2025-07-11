@@ -1,0 +1,9 @@
+*.png
+*.npz
+*.dat
+*.pyc
+*.zip
+*.pdf
+*.txt
+MRCLAM*
+*results*
