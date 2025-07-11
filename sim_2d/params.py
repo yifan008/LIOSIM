@@ -1,15 +1,16 @@
-AT_SIGMA = 1e-2
+VT_SIGMA = 1e-2
+WT_SIGMA = 1e-4
 BEARING_SIGMA = 0.01 # 0.5 # 0.01
 
-SENSOR_VAR = AT_SIGMA * AT_SIGMA
+SENSOR_VAR = VT_SIGMA * VT_SIGMA
 BEARING_VAR = BEARING_SIGMA * BEARING_SIGMA
 
-SIM_FLAG = 5 # 1-PNG pursuing 2-PNG intercept 3-cross motion (refs) 4-cross 5-parallel 6-parallel (no relative motion)
+SIM_FLAG = 1 # 1-circle 2-towards landmark
 
 ITER_NUM = 1
 
 STEP = 0.1
-DURATION = 2000
+DURATION = 240
 
 DATA_RECORDER = False
 
@@ -19,16 +20,6 @@ DRAW_BOUNDS = True
 
 T_ITER = 1
 
-algorithms = ['ekf', 'ideal', 'msc_ideal', 'msc', 'tekf']
+algorithms = ['ideal']
 
-TIME_MARK = '2025-06-10 16:55:39' # 2
-TIME_MARK = '2025-06-11 10:32:54' # 6
-TIME_MARK = '2025-06-11 10:51:54' # 5
-TIME_MARK = '2025-06-10 16:28:59' # 4
-TIME_MARK = '2025-06-10 16:38:52' 
-TIME_MARK = '2025-06-11 10:41:52'
-TIME_MARK = '2025-06-10 16:35:35' # 3
-TIME_MARK = '2025-06-12 12:16:47'
-TIME_MARK = '2025-06-12 21:27:01'
-TIME_MARK = '2025-06-12 21:25:35'
-TIME_MARK = '2025-06-12 23:11:33'
+TIME_MARK = '2025-07-11 16:55:57' 
