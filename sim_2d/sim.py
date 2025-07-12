@@ -55,8 +55,6 @@ class sim_mag:
 
         self.bearing_sigma = team_settings['bearing_sigma']
         
-        self.N = 1
-
         self.history = dict()
 
         self.history['p'] = list() 
@@ -97,6 +95,10 @@ class sim_mag:
 
             self.p += rot_mtx(self.psi) @ self.v * self.dt
             self.psi += self.w * self.dt
+
+            # self.p += rot_mtx(self.psi) @ (self.v * self.dt + self.vt_sigma * np.random.randn(2, ))
+            # self.psi += self.w * self.dt + self.wt_sigma * np.random.randn()
+
             self.pt = self.pt
 
             self.history['p'].append(np.copy(self.p))
@@ -113,9 +115,14 @@ class sim_mag:
         self.odometry = list()
 
         for k in range(len(self.history['v'])):
-            v_ct = self.history['v'][k] + self.vt_sigma * np.random.randn(2, )
-            w_ct = self.history['w'][k] + self.wt_sigma * np.random.randn()
+            # v_ct = self.history['v'][k] + self.vt_sigma * np.random.randn(2, )
+            # w_ct = self.history['w'][k] + self.wt_sigma * np.random.randn()
+
+            v_ct = self.history['v'][k]
+            w_ct = self.history['w'][k]
+
             u = {'v': v_ct, 'w': w_ct}
+
             self.odometry.append(u)
 
         self.measurement = list()

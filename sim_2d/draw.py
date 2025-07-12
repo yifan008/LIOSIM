@@ -59,21 +59,21 @@ if __name__ == '__main__':
 
     for i in range(iter_num):
       if DRAW_BOUNDS:
-        plt_p = plt.figure(figsize=(12, 4))
-        ax_px = plt.subplot(121)
-        plt.xlabel('t (s)', fontsize=12)
+        plt_p_psi = plt.figure(figsize=(12, 8))
+        ax_px = plt.subplot(311)
+        # plt.xlabel('t (s)', fontsize=12)
         plt.ylabel(r'$\rm x \ (m)$', fontsize=12)
         ax_px.tick_params(axis='both', labelsize=12)
 
-        ax_py = plt.subplot(122)
-        plt.xlabel('t (s)', fontsize=12)
+        ax_py = plt.subplot(312)
+        # plt.xlabel('t (s)', fontsize=12)
         plt.ylabel(r'$\rm y \ (m)$', fontsize=12)
         ax_py.tick_params(axis='both', labelsize=12)
 
-        plt_psi = plt.figure(figsize=(12, 4))
-        ax_psi = plt.subplot(121)
+        # plt_psi = plt.figure(figsize=(12, 4))
+        ax_psi = plt.subplot(313)
         plt.xlabel('t (s)', fontsize=12)
-        plt.ylabel(r'$\psi \ \rm (m/s)$', fontsize=12)
+        plt.ylabel(r'$\rm \psi \ (rad)$', fontsize=12)
         ax_psi.tick_params(axis='both', labelsize=12)
 
       for alg in algorithms:
@@ -127,32 +127,33 @@ if __name__ == '__main__':
           nees_pos[alg] += s_nees_pos
           nees_psi[alg] += s_nees_psi
 
-        N_step = int(N / 1000)
+        if DRAW_BOUNDS:
+          N_step = int(N / 100)
 
-        ax_px.plot(time_arr[range(0, N, N_step)], dp_x[range(0, N, N_step)], color=color_tables[alg], label=label_tables[alg], linewidth=1.0, marker = marker_tables[alg], markerfacecolor='white', markersize=4.0)
-        ax_px.plot(time_arr[range(0, N, N_step)], 3*np.sqrt(cov_px_est[range(0, N, N_step)]), color=color_tables[alg], linestyle='-', linewidth=1.2)
-        ax_px.plot(time_arr[range(0, N, N_step)], -3*np.sqrt(cov_px_est[range(0, N, N_step)]), color=color_tables[alg], linestyle='-', linewidth=1.2)
+          ax_px.plot(time_arr[range(0, N, N_step)], dp_x[range(0, N, N_step)], color=color_tables[alg], label=label_tables[alg], linewidth=1.0, marker = marker_tables[alg], markerfacecolor='white', markersize=4.0)
+          ax_px.plot(time_arr[range(0, N, N_step)], 3*np.sqrt(cov_px_est[range(0, N, N_step)]), color=color_tables[alg], linestyle='-', linewidth=1.2)
+          ax_px.plot(time_arr[range(0, N, N_step)], -3*np.sqrt(cov_px_est[range(0, N, N_step)]), color=color_tables[alg], linestyle='-', linewidth=1.2)
 
-        ax_py.plot(time_arr[range(0, N, N_step)], dp_y[range(0, N, N_step)], color=color_tables[alg], label=label_tables[alg], linewidth=1.0, marker = marker_tables[alg], markerfacecolor='white', markersize=4.0)
-        ax_py.plot(time_arr[range(0, N, N_step)], 3*np.sqrt(cov_py_est[range(0, N, N_step)]), color=color_tables[alg], linestyle='-', linewidth=1.2)
-        ax_py.plot(time_arr[range(0, N, N_step)], -3*np.sqrt(cov_py_est[range(0, N, N_step)]), color=color_tables[alg], linestyle='-', linewidth=1.2)
+          ax_py.plot(time_arr[range(0, N, N_step)], dp_y[range(0, N, N_step)], color=color_tables[alg], label=label_tables[alg], linewidth=1.0, marker = marker_tables[alg], markerfacecolor='white', markersize=4.0)
+          ax_py.plot(time_arr[range(0, N, N_step)], 3*np.sqrt(cov_py_est[range(0, N, N_step)]), color=color_tables[alg], linestyle='-', linewidth=1.2)
+          ax_py.plot(time_arr[range(0, N, N_step)], -3*np.sqrt(cov_py_est[range(0, N, N_step)]), color=color_tables[alg], linestyle='-', linewidth=1.2)
 
-        ax_psi.plot(time_arr[range(0, N, N_step)], dpsi[range(0, N, N_step)], color=color_tables[alg], label=label_tables[alg], linewidth=1.0, marker = marker_tables[alg], markerfacecolor='white', markersize=4.0)
-        ax_psi.plot(time_arr[range(0, N, N_step)], 3*np.sqrt(cov_psi_est[range(0, N, N_step)]), color=color_tables[alg], linestyle='-', linewidth=1.2)
-        ax_psi.plot(time_arr[range(0, N, N_step)], -3*np.sqrt(cov_psi_est[range(0, N, N_step)]), color=color_tables[alg], linestyle='-', linewidth=1.2)
+          ax_psi.plot(time_arr[range(0, N, N_step)], dpsi[range(0, N, N_step)], color=color_tables[alg], label=label_tables[alg], linewidth=1.0, marker = marker_tables[alg], markerfacecolor='white', markersize=4.0)
+          ax_psi.plot(time_arr[range(0, N, N_step)], 3*np.sqrt(cov_psi_est[range(0, N, N_step)]), color=color_tables[alg], linestyle='-', linewidth=1.2)
+          ax_psi.plot(time_arr[range(0, N, N_step)], -3*np.sqrt(cov_psi_est[range(0, N, N_step)]), color=color_tables[alg], linestyle='-', linewidth=1.2)
 
-        ax_px.legend(loc = 'upper left', frameon=False, ncol = 4, prop={'family' : 'DejaVu Sans', 'size':10, 'weight':'medium'})
-        ax_py.legend(loc = 'upper left', frameon=False, ncol = 4, prop={'family' : 'DejaVu Sans', 'size':10, 'weight':'medium'})
-        ax_psi.legend(loc = 'upper left', frameon=False, ncol = 4, prop={'family' : 'DejaVu Sans', 'size':10, 'weight':'medium'})
+          ax_px.legend(loc = 'upper left', frameon=False, ncol = 4, prop={'family' : 'DejaVu Sans', 'size':10, 'weight':'medium'})
+          ax_py.legend(loc = 'upper left', frameon=False, ncol = 4, prop={'family' : 'DejaVu Sans', 'size':10, 'weight':'medium'})
+          ax_psi.legend(loc = 'upper left', frameon=False, ncol = 4, prop={'family' : 'DejaVu Sans', 'size':10, 'weight':'medium'})
 
-        current_path = os.getcwd()
-        Path(current_path + "/figures/bounds").mkdir(parents=True, exist_ok=True)
+          current_path = os.getcwd()
+          Path(current_path + "/figures").mkdir(parents=True, exist_ok=True)
 
-        fig_name = str(i+1) + '_p_xy' + '.png'
-        plt_p.savefig(current_path + "/figures/bounds" + fig_name, dpi=600, bbox_inches='tight')
+          fig_name = 'xy_psi_bounds_' + str(i+1) + '.png'
+          plt_p_psi.savefig(current_path + "/figures/" + fig_name, dpi=600, bbox_inches='tight')
 
-        fig_name = str(i+1) + '_psi' + '.png'
-        plt_psi.savefig(current_path + "/figures/bounds" + fig_name, dpi=600, bbox_inches='tight')
+          # fig_name = str(i+1) + '_psi' + '.png'
+          # plt_psi.savefig(current_path + "/figures/bounds" + fig_name, dpi=600, bbox_inches='tight')
 
     data_num = iter_num * N
 
@@ -161,8 +162,7 @@ if __name__ == '__main__':
     for alg in algorithms:
       print('{}: {} {} {} {}'.format(alg, np.sqrt(np.sum(rmse_pos[alg]) / data_num), np.sqrt(np.sum(rmse_psi[alg]) / data_num), np.sum(nees_pos[alg]) / data_num, np.sum(nees_psi[alg]) / data_num))
 
-    # N_step = int(N / 1000)
-    N_step = int(N / 1000)
+    N_step = int(N / 100)
  
     plt_rmse = plt.figure(figsize=(8, 4))
 
@@ -202,12 +202,12 @@ if __name__ == '__main__':
         
     for alg in algorithms:
       nees_pos_ = (nees_pos[alg] / iter_num)[range(0, N, N_step)]
-      
+      nees_psi_ = (nees_psi[alg] / iter_num)[range(0, N, N_step)]
       plt_nees_pos.plot(time_arr[range(0, N, N_step)], nees_pos_, color=color_tables[alg], label=label_tables[alg], linestyle=style_table[alg], linewidth=1.2, marker = marker_tables[alg], markerfacecolor=color_tables[alg], markersize=2)        
-      plt_nees_psi.plot(time_arr[range(0, N, N_step)], (nees_psi[alg] / iter_num)[range(0, N, N_step)], color=color_tables[alg], label=label_tables[alg], linestyle=style_table[alg], linewidth=1.2, marker = marker_tables[alg], markerfacecolor=color_tables[alg], markersize=2)         
+      plt_nees_psi.plot(time_arr[range(0, N, N_step)], nees_psi_, color=color_tables[alg], label=label_tables[alg], linestyle=style_table[alg], linewidth=1.2, marker = marker_tables[alg], markerfacecolor=color_tables[alg], markersize=2)         
 
     plt_nees_pos.axhline(2, color='k', linestyle='--', linewidth = 0.5)
-    plt_nees_psi.axhline(2, color='k', linestyle='--', linewidth = 0.5)
+    plt_nees_psi.axhline(1, color='k', linestyle='--', linewidth = 0.5)
         
     plt_nees_pos.legend(loc = 'upper left', frameon=False, ncol = 4, prop={'family' : 'DejaVu Sans', 'size':10, 'weight':'medium'})
     # plt_nees_pos.set_ylim(0, 11)
@@ -219,7 +219,7 @@ if __name__ == '__main__':
     # box-plot (position and orientation rmse)
     plt_rmse3 = plt.figure(figsize=(6, 4))
     plt_rmse_ax3 = plt.subplot(211)
-    plt.ylabel('Pos. RMSE (m)', fontsize=14)
+    plt.ylabel(r'$\rm Pos. RMSE (m)$', fontsize=14)
     plt_rmse_ax3.tick_params(axis='both', labelsize=14)
 
     plt_rmse_ax4 = plt.subplot(212)

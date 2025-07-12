@@ -41,7 +41,8 @@ class Ideal_EKF():
         pt = dataset['gt']['pt'][idx]
 
         self.F = np.identity(5)
-        self.F[0:2, 2] = self.J @ rot_mtx(psi) @ v * self.dt
+        # self.F[0:2, 2] = self.J @ rot_mtx(psi) @ v * self.dt # TODO
+        self.F[0:2, 2] = self.J @ (dataset['gt']['p'][idx+1] - p)  # TODO
 
         self.G = np.zeros((5, 3))
         self.G[0:2, 0:2] = self.dt * rot_mtx(psi)
@@ -49,7 +50,7 @@ class Ideal_EKF():
 
         self.Q = np.identity(3)
         self.Q[0:2, 0:2] = self.Q[0:2, 0:2] * VT_SIGMA**2
-        self.Q[2, 2] = self.Q[2, 2] * WT_SIGMA **2
+        self.Q[2, 2] = self.Q[2, 2] * WT_SIGMA**2
 
         self.Fk = self.F @ self.Fk
 

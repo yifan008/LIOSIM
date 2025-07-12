@@ -17,17 +17,29 @@ class T_EKF():
         self.dt = self.robot_system.dt
         self.duration = self.robot_system.duration
         
-        self.F = np.identity(4)
-        self.F[0:2, 2:4] = self.dt * np.identity(2)
-
-        self.G = np.zeros((4, 2))
-        self.G[0:2, 0:2] = 0.5 * self.dt**2 * np.identity(2)
-        self.G[2:4, 0:2] = self.dt * np.identity(2)
+        self.J = np.array([[0, -1], [1, 0]])
 
         self.running_time = 0
 
-        self.Wk = np.zeros(shape=(4, 4), dtype=float)
-        self.Fk = np.identity(4)
+        self.Wk = np.zeros(shape=(5, 5), dtype=float)
+        self.Fk = np.identity(5)
+
+        p = self.robot_system.xyt[0:2]
+        psi = self.robot_system.xyt[2]
+        pt = self.robot_system.xyt[3:5]
+
+        Aki = np.identity(2)
+        if Flag3:
+            Aki[0, 0] = 1 / (pt[0] - p[0])
+            Aki[1, 0] = - (pt[1] - p[1]) / (pt[0] - p[0])
+
+        Ts = np.identity(5)
+        Ts[0:2, 2] = - self.J @ p
+        Ts[3:5, 0:2] = -Aki
+        Ts[3:5, 2] = -Aki @ self.J @ (pt - p)
+        Ts[3:5, 3:5] = Aki
+
+        self.cov = Ts @ self.robot_system.cov @ Ts.T
 
     def prediction(self, t):
         dataset = self.dataset
@@ -38,26 +50,80 @@ class T_EKF():
         idx = int(t / self.dt - 1)
 
         # extract odometry
-        a = -dataset['odometry'][idx]
+        u_ctl = dataset['odometry'][idx]
+
+        v = u_ctl['v']
+        w = u_ctl['w']
 
         # extract state vector
-        r_p = self.robot_system.xyt[0:2]
-        r_v = self.robot_system.xyt[2:4]
+        p = self.robot_system.xyt[0:2]
+        psi = self.robot_system.xyt[2]
+        pt = self.robot_system.xyt[3:5]
+
+        self.F = np.identity(5)
+        self.F[0:2, 2] = self.J @ rot_mtx(psi) @ v * self.dt # TODO
+
+        self.G = np.zeros((5, 3))
+        self.G[0:2, 0:2] = self.dt * rot_mtx(psi)
+        self.G[2, 2] = self.dt
+
+        self.Q = np.identity(3)
+        self.Q[0:2, 0:2] = self.Q[0:2, 0:2] * VT_SIGMA**2
+        self.Q[2, 2] = self.Q[2, 2] * WT_SIGMA**2
+
+        Ak = np.identity(2)
+        if Flag3:
+            Ak[0:2, 0] = pt - p
+
+        Ti = np.identity(5)
+        Ti[0:2, 2] = self.J @ p
+        Ti[3:5, 0:2] = np.identity(2)
+        Ti[3:5, 2] = self.J @ pt
+        Ti[3:5, 3:5] = Ak
 
         # state prediction
-        r_p = r_p + self.dt * r_v + 0.5 * self.dt**2 * a 
-        r_v = r_v + self.dt * a
+        p = p + self.dt * rot_mtx(psi) @ v
+        psi = psi + self.dt * w
 
-        self.robot_system.xyt[0:2] = r_p
-        self.robot_system.xyt[2:4] = r_v
+        Aki = np.identity(2)
+        if Flag3:
+            Aki[0, 0] = 1 / (pt[0] - p[0])
+            Aki[1, 0] = - (pt[1] - p[1]) / (pt[0] - p[0])
 
-        self.Q = SENSOR_VAR * np.identity(2)
+        Ts = np.identity(5)
+        Ts[0:2, 2] = - self.J @ p
+        Ts[3:5, 0:2] = -Aki
+        Ts[3:5, 2] = -Aki @ self.J @ (pt - p)
+        Ts[3:5, 3:5] = Aki
 
+        # print(Ts)
+
+        self.robot_system.xyt[0:2] = p
+        self.robot_system.xyt[2] = psi
+        self.robot_system.xyt[3:5] = pt
+
+        self.F = Ts @ self.F @ Ti
+        self.G = Ts @ self.G
+ 
         self.Fk = self.F @ self.Fk
 
+        # print(self.F)
+
         # covariance prediction
-        self.robot_system.cov = self.F @ self.robot_system.cov @ self.F.T + self.G @ self.Q @ self.G.T
+        self.cov = self.F @ self.cov @ self.F.T + self.G @ self.Q @ self.G.T
     
+        Ak = np.identity(2)
+        if Flag3:
+            Ak[0:2, 0] = pt - p
+
+        Ti = np.identity(5)
+        Ti[0:2, 2] = self.J @ p
+        Ti[3:5, 0:2] = np.identity(2)
+        Ti[3:5, 2] = self.J @ pt
+        Ti[3:5, 3:5] = Ak
+
+        self.robot_system.cov = Ti @ self.cov @ Ti.T
+
         end_time = time.time()
         
         self.running_time += (end_time - start_time)
@@ -71,146 +137,77 @@ class T_EKF():
         
         bearing = dataset['measurement'][idx]
 
-        r_p = self.robot_system.xyt[0:2]
-        r_v = self.robot_system.xyt[2:4]
+        p = self.robot_system.xyt[0:2]
+        pt = self.robot_system.xyt[3:5]
 
-        # z_hat = m.atan2(r_p[1], r_p[0])          
-        z_hat = m.atan2(r_p[0], r_p[1])          
+        r_p = pt - p
+
+        z_hat = m.atan2(r_p[1], r_p[0])
         z = m.atan2(m.sin(bearing), m.cos(bearing))
         
         dz = z - z_hat
-
         dz = m.atan2(m.sin(dz), m.cos(dz))
 
         # construct measurement matrix
-        H = np.zeros((1, 4))
+        H = np.zeros((1, 5))
 
-        H[0, 0] = r_p[1] / (r_p[0]**2 + r_p[1]**2)        
-        H[0, 1] = - r_p[0] / (r_p[0]**2 + r_p[1]**2)
+        H[0, 0:2] = r_p.T @ self.J / (r_p[0]**2 + r_p[1]**2)        
+        H[0, 3:5] = - r_p.T @ self.J / (r_p[0]**2 + r_p[1]**2)
+        H[0, 2] = -1
 
+        Ak = np.identity(2)
+        if Flag3:
+            Ak[0:2, 0] = pt - p
+
+        Ti = np.identity(5)
+        Ti[0:2, 2] = self.J @ p
+        Ti[3:5, 0:2] = np.identity(2)
+        Ti[3:5, 2] = self.J @ pt
+        Ti[3:5, 3:5] = Ak
+
+        H = H @ Ti
+
+        # print(H)
+        
         self.Wk = self.Wk + (H @ self.Fk).T @ (H @ self.Fk)
 
-        cov = self.robot_system.cov
+        cov = self.cov
 
         innovation_inv = 1.0 / (H @ cov @ H.T + BEARING_VAR)
 
         Kalman_gain = cov @ H.T * innovation_inv
 
-        T = self.Jacobian_trans(self.robot_system.xyt)
+        self.cov = (np.identity(5) - Kalman_gain @ H) @ cov
 
-        state_z = self.state_transformation_inv(self.robot_system.xyt)
+        Ak = np.identity(2)
+        if Flag3:
+            Ak[0:2, 0] = pt - p
 
-        state_z_ = state_z + T @ Kalman_gain[:, 0] * dz
-        
-        self.robot_system.xyt = self.state_transformation(state_z_)
+        Ti = np.identity(5)
+        Ti[0:2, 2] = self.J @ p
+        Ti[3:5, 0:2] = np.identity(2)
+        Ti[3:5, 2] = self.J @ pt
+        Ti[3:5, 3:5] = Ak
 
-        # self.robot_system.xyt = self.robot_system.xyt + Kalman_gain[:, 0] * dz
+        self.robot_system.cov = Ti @ self.cov @ Ti.T
 
-        INT = self.Jacobian_trans_inv(state_z_)
+        self.robot_system.xyt = self.robot_system.xyt + Ti @ Kalman_gain[:, 0] * dz
 
-        delta_T = INT @ T
-
-        self.robot_system.cov = delta_T @ (np.identity(4) - Kalman_gain @ H) @ cov @ delta_T.T
-        
         end_time = time.time()
         self.running_time += (end_time - start_time)
 
-    def Jacobian_trans(self, state):
-        state_z = self.state_transformation_inv(state)
-
-        rho = state_z[0]
-        beta = state_z[1]
-        rho_d = state_z[2]
-        beta_d = state_z[3]
-
-        A1 = np.identity(4)
-
-        A1[0, 0] = m.sin(beta)
-        A1[0, 1] = m.cos(beta)
-        A1[1, 0] = m.cos(beta)
-        A1[1, 1] = -m.sin(beta)
-
-        A1[2:4, 2:4] = A1[0:2, 0:2]
-
-        A2 = np.identity(4)
-
-        A2[0, 0] = - rho
-        A2[2, 0] = - rho_d
-        A2[2, 1] = beta_d
-        A2[3, 0] = - beta_d
-        A2[3, 1] = - rho_d
-        A2 = rho * A2
-
-        M3 = A2 @ A1
-
-        return M3
-
-    def Jacobian_trans_inv(self, state_z):
-        rho = state_z[0]
-        beta = state_z[1]
-        rho_d = state_z[2]
-        beta_d = state_z[3]
-
-        A1 = np.identity(4)
-
-        A1[0, 0] = m.sin(beta)
-        A1[0, 1] = m.cos(beta)
-        A1[1, 0] = m.cos(beta)
-        A1[1, 1] = -m.sin(beta)
-
-        A1[2:4, 2:4] = A1[0:2, 0:2]
-
-        A2 = np.identity(4)
-
-        A2[0, 0] = - 1 / rho
-        A2[2, 0] = - 1 / rho * rho_d
-        A2[2, 1] = - beta_d
-        A2[3, 0] = - 1 / rho * beta_d
-        A2[3, 1] = rho_d
-        A2 = A2 * 1 / rho
-
-        M1 = A1 @ A2
-
-        return M1
-
-    # (1/rho beta dot(1/rho) dot(beta)) -----> (x y vx vy)
-    def state_transformation(self, state):
-        rho = state[0]
-        beta = state[1]
-        rho_d = state[2]
-        beta_d = state [3]
-
-        rx = 1.0 / rho * m.sin(beta)
-        ry = 1.0 / rho * m.cos(beta)
-        vx = 1.0 / rho * (rho_d * m.sin(beta) + beta_d * m.cos(beta))
-        vy = 1.0 / rho * (rho_d * m.cos(beta) - beta_d * m.sin(beta))
-
-        return np.array([rx, ry, vx, vy])
-    
-    # (x y vx vy) -----> (1/rho beta dot(1/rho) dot(beta))
-    def state_transformation_inv(self, state):
-        rx = state[0]
-        ry = state[1]
-        vx = state[2]
-        vy = state[3]
-
-        rho = 1.0 / m.sqrt( rx**2 + ry**2 )
-        beta = m.atan2(rx, ry)
-        rho_d = (rx * vx + ry * vy) / ( rx**2 + ry**2 ) 
-        beta_d = (ry * vx - rx * vy) / ( rx**2 + ry**2 ) 
-
-        return np.array([rho, beta, rho_d, beta_d])
-
     def save_est(self, t):
-        x = self.robot_system.xyt[0]
-        y = self.robot_system.xyt[1]
+        px = self.robot_system.xyt[0]
+        py = self.robot_system.xyt[1]
         
-        vx = self.robot_system.xyt[2]
-        vy = self.robot_system.xyt[3]
+        psi = self.robot_system.xyt[2]
+
+        ptx = self.robot_system.xyt[3]
+        pty = self.robot_system.xyt[4]
 
         cov = self.robot_system.cov
 
-        self.robot_system.history.append({'x': np.copy(x), 'y': np.copy(y), 'vx': np.copy(vx), 'vy': np.copy(vy), 'cov': np.copy(cov)})
+        self.robot_system.history.append({'px': np.copy(px), 'py': np.copy(py), 'psi': np.copy(psi), 'ptx': np.copy(ptx), 'pty': np.copy(pty), 'cov': np.copy(cov)})
 
     def run(self):
         # initialize time

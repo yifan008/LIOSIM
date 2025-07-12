@@ -2,14 +2,13 @@ VT_SIGMA = 1e-2
 WT_SIGMA = 1e-4
 BEARING_SIGMA = 0.01 # 0.5 # 0.01
 
-SENSOR_VAR = VT_SIGMA * VT_SIGMA
 BEARING_VAR = BEARING_SIGMA * BEARING_SIGMA
 
-SIM_FLAG = 1 # 1-circle 2-towards landmark
+SIM_FLAG = 2 # 1-circle 2-towards landmark
 
 ITER_NUM = 1
 
-STEP = 0.1
+STEP = 1
 DURATION = 240
 
 DATA_RECORDER = False
@@ -18,8 +17,8 @@ PRINT_TIME = True
 
 DRAW_BOUNDS = True
 
-T_ITER = 1
+Flag3 = True
 
-algorithms = ['ideal']
+algorithms = ['ideal', 'ekf', 'tekf']
 
-TIME_MARK = '2025-07-11 16:55:57' 
+TIME_MARK = '2025-07-12 15:39:34'

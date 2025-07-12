@@ -15,17 +15,12 @@ class Centralized_EKF():
         self.dt = self.robot_system.dt
         self.duration = self.robot_system.duration
         
-        self.F = np.identity(4)
-        self.F[0:2, 2:4] = self.dt * np.identity(2)
-
-        self.G = np.zeros((4, 2))
-        self.G[0:2, 0:2] = 0.5 * self.dt**2 * np.identity(2)
-        self.G[2:4, 0:2] = self.dt * np.identity(2)
+        self.J = np.array([[0, -1], [1, 0]])
 
         self.running_time = 0
 
-        self.Wk = np.zeros(shape=(4, 4), dtype=float)
-        self.Fk = np.identity(4)
+        self.Wk = np.zeros(shape=(5, 5), dtype=float)
+        self.Fk = np.identity(5)
 
     def prediction(self, t):
         dataset = self.dataset
@@ -36,26 +31,36 @@ class Centralized_EKF():
         idx = int(t / self.dt - 1)
 
         # extract odometry
-        a = -dataset['odometry'][idx]
+        u_ctl = dataset['odometry'][idx]
 
-        # print(a.shape)
+        v = u_ctl['v']
+        w = u_ctl['w']
 
         # extract state vector
-        r_p = self.robot_system.xyt[0:2]
-        r_v = self.robot_system.xyt[2:4]
+        p = self.robot_system.xyt[0:2]
+        psi = self.robot_system.xyt[2]
+        pt = self.robot_system.xyt[3:5]
 
-        # print(r_p.shape, r_v.shape)
+        self.F = np.identity(5)
+        self.F[0:2, 2] = self.J @ rot_mtx(psi) @ v * self.dt # TODO
 
-        # state prediction
-        r_p = r_p + self.dt * r_v + 0.5 * self.dt**2 * a 
-        r_v = r_v + self.dt * a
+        self.G = np.zeros((5, 3))
+        self.G[0:2, 0:2] = self.dt * rot_mtx(psi)
+        self.G[2, 2] = self.dt
 
-        self.robot_system.xyt[0:2] = r_p
-        self.robot_system.xyt[2:4] = r_v
+        self.Q = np.identity(3)
+        self.Q[0:2, 0:2] = self.Q[0:2, 0:2] * VT_SIGMA**2
+        self.Q[2, 2] = self.Q[2, 2] * WT_SIGMA**2
 
         self.Fk = self.F @ self.Fk
 
-        self.Q = SENSOR_VAR * np.identity(2)
+        # state prediction
+        p = p + self.dt * rot_mtx(psi) @ v
+        psi = psi + self.dt * w
+
+        self.robot_system.xyt[0:2] = p
+        self.robot_system.xyt[2] = psi
+        self.robot_system.xyt[3:5] = pt
 
         # covariance prediction
         self.robot_system.cov = self.F @ self.robot_system.cov @ self.F.T + self.G @ self.Q @ self.G.T
@@ -73,25 +78,23 @@ class Centralized_EKF():
         
         bearing = dataset['measurement'][idx]
 
-        r_p = self.robot_system.xyt[0:2]
-        r_v = self.robot_system.xyt[2:4]
+        p = self.robot_system.xyt[0:2]
+        pt = self.robot_system.xyt[3:5]
 
-        # z_hat = m.atan2(r_p[1], r_p[0])          
-        z_hat = m.atan2(r_p[0], r_p[1])          
+        r_p = pt - p
+
+        z_hat = m.atan2(r_p[1], r_p[0])
         z = m.atan2(m.sin(bearing), m.cos(bearing))
         
         dz = z - z_hat
-
         dz = m.atan2(m.sin(dz), m.cos(dz))
 
         # construct measurement matrix
-        H = np.zeros((1, 4))
+        H = np.zeros((1, 5))
 
-        # H[0, 0] = - r_p[1] / (r_p[0]**2 + r_p[1]**2)        
-        # H[0, 1] = r_p[0] / (r_p[0]**2 + r_p[1]**2)
-
-        H[0, 0] = r_p[1] / (r_p[0]**2 + r_p[1]**2)        
-        H[0, 1] = - r_p[0] / (r_p[0]**2 + r_p[1]**2)
+        H[0, 0:2] = r_p.T @ self.J / (r_p[0]**2 + r_p[1]**2)        
+        H[0, 3:5] = - r_p.T @ self.J / (r_p[0]**2 + r_p[1]**2)
+        H[0, 2] = -1
 
         self.Wk = self.Wk + (H @ self.Fk).T @ (H @ self.Fk)
 
@@ -103,7 +106,7 @@ class Centralized_EKF():
 
         self.robot_system.xyt = self.robot_system.xyt + Kalman_gain[:, 0] * dz
         
-        self.robot_system.cov = (np.identity(4) - Kalman_gain @ H) @ cov
+        self.robot_system.cov = (np.identity(5) - Kalman_gain @ H) @ cov
 
         #print(self.robot_system.xyt)
         #print(self.robot_system.cov)
@@ -113,15 +116,17 @@ class Centralized_EKF():
         self.running_time += (end_time - start_time)
         
     def save_est(self, t):
-        x = self.robot_system.xyt[0]
-        y = self.robot_system.xyt[1]
+        px = self.robot_system.xyt[0]
+        py = self.robot_system.xyt[1]
         
-        vx = self.robot_system.xyt[2]
-        vy = self.robot_system.xyt[3]
+        psi = self.robot_system.xyt[2]
+
+        ptx = self.robot_system.xyt[3]
+        pty = self.robot_system.xyt[4]
 
         cov = self.robot_system.cov
 
-        self.robot_system.history.append({'x': np.copy(x), 'y': np.copy(y), 'vx': np.copy(vx), 'vy': np.copy(vy), 'cov': np.copy(cov)})
+        self.robot_system.history.append({'px': np.copy(px), 'py': np.copy(py), 'psi': np.copy(psi), 'ptx': np.copy(ptx), 'pty': np.copy(pty), 'cov': np.copy(cov)})
 
     def run(self):
         # initialize time

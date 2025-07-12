@@ -31,19 +31,19 @@ class CentralizedSystem():
 
     def init_team(self, dataset):
 
-        px = dataset[0] + 0.2
-        py = dataset[1] + 0.2
+        px = dataset[0] + 0.5
+        py = dataset[1] + 0.5
         
         psi = dataset[2] + 0.01
 
-        ptx = dataset[3] + 0.1
-        pty = dataset[4] + 0.1
+        ptx = dataset[3]
+        pty = dataset[4]
 
         # print(dataset)
 
         self.xyt = np.array((px, py, psi, ptx, pty))
 
-        self.cov[0:2, 0:2] = np.identity(2) * 0.2**2
+        self.cov[0:2, 0:2] = np.identity(2) * 0.5**2
         self.cov[2, 2] = 0.01**2
         self.cov[3:5, 3:5] = 0.1**2
 
