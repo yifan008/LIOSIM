@@ -53,7 +53,7 @@ class sim_mag:
         self.vt_sigma = team_settings['vt_sigma']
         self.wt_sigma = team_settings['wt_sigma']
 
-        self.bearing_sigma = team_settings['bearing_sigma']
+        self.bearing_sigma = team_settings['lidar_sigma']
         
         self.history = dict()
 
