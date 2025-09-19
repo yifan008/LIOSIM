@@ -1,15 +1,11 @@
-VT_SIGMA = 1e-2
-WT_SIGMA = 1e-4
-BEARING_SIGMA = 0.01 # 0.5 # 0.01
-
-BEARING_VAR = BEARING_SIGMA * BEARING_SIGMA
-
-SIM_FLAG = 2 # 1-circle 2-towards landmark
+VT_SIGMA = 0.1
+WT_SIGMA = 0.04
+LIDAR_SIGMA = 0.1 
 
 ITER_NUM = 1
 
 STEP = 1
-DURATION = 240
+DURATION = 2400
 
 DATA_RECORDER = False
 
@@ -17,8 +13,8 @@ PRINT_TIME = True
 
 DRAW_BOUNDS = True
 
-Flag3 = True
+DRAW_TRAJECTORY = False
 
-algorithms = ['ideal', 'ekf', 'tekf']
+algorithms = ['bekf', 'sekf', 'nekf', 'idekf', 'schmidt', 'ciekf', 'iciekf']  # 'bda'
 
-TIME_MARK = '2025-07-12 15:39:34'
+TIME_MARK = '2025-09-19_18-20-48'

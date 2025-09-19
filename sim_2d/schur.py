@@ -1,0 +1,286 @@
+#! /usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import numpy as np
+import time
+import math as m
+
+from robot_system import *
+
+class SCHUR_EKF():
+    def __init__(self, robot_system, dataset):
+        self.robot_system = robot_system
+        self.dataset = dataset
+
+        self.dt = self.robot_system.dt
+        self.duration = self.robot_system.duration
+        
+        self.J = np.array([[0, -1], [1, 0]])
+
+        self.running_time = 0
+
+        self.xyt = np.copy(self.robot_system.xyt)
+        self.cov = np.copy(self.robot_system.cov)
+
+        dim = self.xyt.shape[0]
+
+        if dim == 3:
+            self.landmark_seq = []
+            
+        self.Q = np.identity(3)
+        self.Q[0:2, 0:2] = self.Q[0:2, 0:2] * VT_SIGMA**2
+        self.Q[2, 2] = self.Q[2, 2] * WT_SIGMA**2
+
+    def prediction(self, t):
+        dataset = self.dataset
+
+        start_time = time.time()
+
+        # get nearest index
+        idx = int(t / self.dt - 1)
+
+        # extract odometry
+        u_ctl = dataset['odometry'][idx]
+
+        # print('odometry: {} \n'.format(len(dataset['odometry'])))
+        # print('measurement: {} \n'.format(len(dataset['measurement'])))
+        # print('gt: {} \n'.format(len(dataset['gt'])))
+
+        v = u_ctl['v']
+        w = u_ctl['w']
+
+        # extract state vector
+        p = self.xyt[0:2]
+        psi = self.xyt[2]
+
+        # dim = self.xyt.shape[0]
+        # self.F = np.identity(dim)
+        # self.F[0:2, 2] = self.J @ rot_mtx(psi) @ v * self.dt # TODO
+
+        self.F = np.identity(3)
+        self.F[0:2, 2] = self.J @ rot_mtx(psi) @ v * self.dt # TODO
+
+        self.G = np.zeros((3, 3))
+        self.G[0:2, 0:2] = self.dt * rot_mtx(psi)
+        self.G[2, 2] = self.dt
+
+        # state prediction
+        p = p + self.dt * rot_mtx(psi) @ v
+        psi = psi + self.dt * w
+
+        # covariance prediction
+        self.cov[0:3, 0:3] = self.F @ self.cov[0:3, 0:3] @ self.F.T + self.G @ self.Q @ self.G.T
+
+        self.xyt[0:2] = p
+        self.xyt[2] = psi
+        
+        self.robot_system.xyt = self.xyt[0:3]
+        self.robot_system.cov = self.cov[0:3, 0:3]
+            
+        end_time = time.time()
+        
+        self.running_time += (end_time - start_time)
+    
+    def absolute_observation(self, t):
+        dataset = self.dataset
+        
+        start_time = time.time()
+
+        idx = int(t / self.dt)
+      
+        # print(idx, len(dataset['measurement']))  
+        landmark_observation = dataset['measurement'][idx]
+        
+        # observation
+        observation_num = len(landmark_observation)
+
+        if observation_num == 0:
+            return
+        
+        self.landmark_seq_in_state = []
+        self.landmark_seq_no_in_state = []
+
+        landmark_observation_id = []
+                
+        for i in range(len(landmark_observation)):
+            if landmark_observation[i]['id'] in self.landmark_seq:
+                self.landmark_seq_in_state.append(landmark_observation[i])
+            else:
+                self.landmark_seq_no_in_state.append(landmark_observation[i])
+
+            landmark_observation_id.append(landmark_observation[i]['id'])
+
+        # print(self.landmark_seq, landmark_observation_id)
+            
+        self.landmark_seq_no_obs = []
+
+        for i in range(len(self.landmark_seq)):
+            if self.landmark_seq[i] in landmark_observation_id:
+                pass
+            else:
+                self.landmark_seq_no_obs.append(self.landmark_seq[i])
+        
+        dim = self.xyt.shape[0]
+        
+        # state update
+        if len(self.landmark_seq_in_state) > 0:
+            observation_num = len(self.landmark_seq_in_state)
+            
+            SEQ_UPDATE = False
+
+            if SEQ_UPDATE:
+                # sequential update
+                for i in range(observation_num):
+                    idx = self.landmark_seq_in_state[i]['id']
+                    ids = self.landmark_seq.index(idx)
+
+                    z_hat = rot_mtx(self.xyt[2]).T @ (self.xyt[ids*2+3:(ids+1)*2+3] - self.xyt[0:2])
+                    z = self.landmark_seq_in_state[i]['obs']
+                    dz = z - z_hat
+                    
+                    # print(z_hat, z, dz)
+
+                    Hx = np.zeros((2, 3))
+                    Hx[:, 2] = - self.J @ (self.xyt[2*ids+3:2*(ids+1)+3] - self.xyt[0:2])
+                    Hx[:, 0:2] = - np.identity(2)
+                    
+                    Hx = rot_mtx(self.xyt[2]).T @ Hx 
+                    Hf = rot_mtx(self.xyt[2]).T
+                    
+                    C1 = Hx.T @ Hx
+                    C2 = Hx.T @ Hf
+                    C3 = Hf.T @ Hf
+
+                    b1 = Hx.T @ dz
+                    b2 = Hf.T @ dz
+                    
+                    dz_ = b1 - C2 @ np.linalg.inv(C3) @ b2
+                    H = C1 - C2 @ np.linalg.inv(C3) @ C2.T
+                    R = H * LIDAR_SIGMA**2 
+                    
+                    innovation_inv = np.linalg.pinv(H @ self.cov[0:3, 0:3] @ H.T + R)
+                    kalman_gain = self.cov[0:3, 0:3] @ H.T @ innovation_inv
+                    self.xyt[0:3] = self.xyt[0:3] + kalman_gain @ dz_
+                    self.cov[0:3, 0:3] = (np.identity(3) - kalman_gain @ H) @ self.cov[0:3, 0:3]
+            else:
+                # batch update
+                # print('batch update')
+                H = np.zeros((3*observation_num, 3))
+                dz_ = np.zeros((3*observation_num, ))
+                R = np.identity(3*observation_num)
+
+                for i in range(observation_num):
+                    idx = self.landmark_seq_in_state[i]['id']
+                    ids = self.landmark_seq.index(idx)
+
+                    z_hat = rot_mtx(self.xyt[2]).T @ (self.xyt[ids*2+3:(ids+1)*2+3] - self.xyt[0:2])
+                    z = self.landmark_seq_in_state[i]['obs']
+                    dz = z - z_hat
+                    
+                    Hx = np.zeros((2, 3))
+                    Hx[:, 2] = - self.J @ (self.xyt[2*ids+3:2*(ids+1)+3] - self.xyt[0:2])
+                    Hx[:, 0:2] = - np.identity(2)
+                    
+                    Hx = rot_mtx(self.xyt[2]).T @ Hx 
+                    Hf = rot_mtx(self.xyt[2]).T
+                    
+                    C1 = Hx.T @ Hx
+                    C2 = Hx.T @ Hf
+                    C3 = Hf.T @ Hf
+
+                    b1 = Hx.T @ dz
+                    b2 = Hf.T @ dz
+                    
+                    dz_[3*i:3*(i+1)] = b1 - C2 @ np.linalg.inv(C3) @ b2
+                    H[3*i:3*(i+1), :] = C1 - C2 @ np.linalg.inv(C3) @ C2.T
+                    R[3*i:3*(i+1), 3*i:3*(i+1)] = (C1 - C2 @ np.linalg.inv(C3) @ C2.T) * LIDAR_SIGMA**2 
+                        
+                # innovation_inv = np.linalg.pinv(H @ self.cov[0:3, 0:3] @ H.T + R)
+                
+                A = H @ self.cov[0:3, 0:3] @ H.T + R
+                U, S, Vt = np.linalg.svd(A)
+
+                for i in range(S.shape[0]):
+                    if S[i] > 1e-10:
+                        S[i] = 1.0 / S[i]
+                
+                innovation_inv = Vt.T @ np.diag(S) @ U.T
+                                   
+                kalman_gain = self.cov[0:3, 0:3] @ H.T @ innovation_inv
+                self.xyt[0:3] = self.xyt[0:3] + kalman_gain @ dz_
+                self.cov[0:3, 0:3] = (np.identity(3) - kalman_gain @ H) @ self.cov[0:3, 0:3]
+                
+        # state augment    
+        if len(self.landmark_seq_no_in_state) > 0:
+            n_observation_num = len(self.landmark_seq_no_in_state)
+            
+            bX = self.xyt
+            self.xyt = np.zeros((dim + 2*n_observation_num, ))
+            self.xyt[0:dim] = bX
+             
+            bP = self.cov
+            self.cov = np.identity(dim + 2*n_observation_num)
+            self.cov[0:dim, 0:dim] = bP
+
+            for i in range(len(self.landmark_seq_no_in_state)):
+                self.landmark_seq.append(self.landmark_seq_no_in_state[i]['id'])
+                
+                obs_p = self.landmark_seq_no_in_state[i]['obs']
+                
+                self.xyt[i*2+dim:(i+1)*2+dim] = rot_mtx(self.xyt[2]) @ obs_p + self.xyt[0:2]
+
+                HL = np.hstack((np.identity(2), (self.J @ rot_mtx(self.xyt[2]) @ obs_p).reshape(2, 1)))
+                HR = rot_mtx(self.xyt[2])
+
+                self.cov[i*2+dim:(i+1)*2+dim, i*2+dim:(i+1)*2+dim] = HL @ self.cov[0:3, 0:3] @ HL.T + \
+                                                                HR @ (LIDAR_SIGMA **2 * np.identity(2)) @ HR.T
+                
+                self.cov[i*2+dim:(i+1)*2+dim, 0:3] = HL @ self.cov[0:3, 0:3]
+                self.cov[0:3, i*2+dim:(i+1)*2+dim] = self.cov[i*2+dim:(i+1)*2+dim, 0:3].T
+
+                self.cov[i*2+dim:(i+1)*2+dim, 3:i*2+dim] = HL @ self.cov[0:3, 3:i*2+dim]
+                self.cov[3:i*2+dim, i*2+dim:(i+1)*2+dim] = self.cov[i*2+dim:(i+1)*2+dim, 3:i*2+dim].T
+
+        # state marginalize
+        if len(self.landmark_seq_no_obs) > 0:
+            pass      
+        
+        self.robot_system.xyt = self.xyt[0:3]        
+        self.robot_system.cov = self.cov[0:3, 0:3]
+
+        #print(self.robot_system.xyt)
+        #print(self.robot_system.cov)
+        #print('----end----')
+        
+        end_time = time.time()
+        self.running_time += (end_time - start_time)
+        
+    def save_est(self, t):
+        px = self.robot_system.xyt[0]
+        py = self.robot_system.xyt[1]
+        
+        psi = self.robot_system.xyt[2]
+
+        cov = self.robot_system.cov
+
+        self.robot_system.history.append({'px': px, 'py': py, 'psi': psi, 'cov': np.copy(cov)})
+
+    def run(self):
+        # initialize time
+        t = 0
+
+        while t < self.duration: 
+
+          # prediction (time propagation) step
+          self.prediction(t)
+          
+          self.absolute_observation(t)
+
+          # save the estimate
+          self.save_est(t)
+
+          # update the time
+          t = t + self.dt
+        
+        if PRINT_TIME:
+          print('schur_ekf duration: {} \n'.format(self.running_time / self.duration))

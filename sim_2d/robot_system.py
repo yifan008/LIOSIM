@@ -22,7 +22,7 @@ class CentralizedSystem():
 
         self.history = list()
 
-        self.dim = 5
+        self.dim = 3
         
         self.xyt = np.zeros(shape=(self.dim), dtype=float)
         self.cov =  np.zeros(shape=(self.dim, self.dim), dtype=float)
@@ -31,20 +31,13 @@ class CentralizedSystem():
 
     def init_team(self, dataset):
 
-        px = dataset[0] + 0.5
-        py = dataset[1] + 0.5
-        
-        psi = dataset[2] + 0.01
+        px = dataset[0] + 0.02
+        py = dataset[1] + 0.02
+        psi = dataset[2] + 0.001
 
-        ptx = dataset[3]
-        pty = dataset[4]
+        self.xyt = np.array((px, py, psi))
 
-        # print(dataset)
+        self.cov[0:2, 0:2] = np.identity(2) * 0.02**2
+        self.cov[2, 2] = 0.001**2
 
-        self.xyt = np.array((px, py, psi, ptx, pty))
-
-        self.cov[0:2, 0:2] = np.identity(2) * 0.5**2
-        self.cov[2, 2] = 0.01**2
-        self.cov[3:5, 3:5] = 0.1**2
-
-        self.history.append({'px': px, 'py': py, 'psi': psi, 'ptx': ptx, 'pty': pty, 'cov': self.cov})
+        self.history.append({'px': px, 'py': py, 'psi': psi, 'cov': self.cov})
