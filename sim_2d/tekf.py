@@ -6,8 +6,7 @@ import time
 import math as m
 
 from robot_system import *
-
-from scipy.optimize import fminbound
+from params import *
 
 class T_EKF():
     def __init__(self, robot_system, dataset):
@@ -21,25 +20,17 @@ class T_EKF():
 
         self.running_time = 0
 
-        self.Wk = np.zeros(shape=(5, 5), dtype=float)
-        self.Fk = np.identity(5)
+        self.xyt = np.copy(self.robot_system.xyt)
+        self.cov = np.copy(self.robot_system.cov)
 
-        p = self.robot_system.xyt[0:2]
-        psi = self.robot_system.xyt[2]
-        pt = self.robot_system.xyt[3:5]
+        dim = self.xyt.shape[0]
 
-        Aki = np.identity(2)
-        if Flag3:
-            Aki[0, 0] = 1 / (pt[0] - p[0])
-            Aki[1, 0] = - (pt[1] - p[1]) / (pt[0] - p[0])
-
-        Ts = np.identity(5)
-        Ts[0:2, 2] = - self.J @ p
-        Ts[3:5, 0:2] = -Aki
-        Ts[3:5, 2] = -Aki @ self.J @ (pt - p)
-        Ts[3:5, 3:5] = Aki
-
-        self.cov = Ts @ self.robot_system.cov @ Ts.T
+        if dim == 3:
+            self.landmark_seq = []
+            
+        self.Q = np.identity(3)
+        self.Q[0:2, 0:2] = self.Q[0:2, 0:2] * VT_SIGMA**2
+        self.Q[2, 2] = self.Q[2, 2] * WT_SIGMA**2
 
     def prediction(self, t):
         dataset = self.dataset
@@ -52,168 +43,231 @@ class T_EKF():
         # extract odometry
         u_ctl = dataset['odometry'][idx]
 
+        # print('odometry: {} \n'.format(len(dataset['odometry'])))
+        # print('measurement: {} \n'.format(len(dataset['measurement'])))
+        # print('gt: {} \n'.format(len(dataset['gt'])))
+
         v = u_ctl['v']
         w = u_ctl['w']
 
         # extract state vector
-        p = self.robot_system.xyt[0:2]
-        psi = self.robot_system.xyt[2]
-        pt = self.robot_system.xyt[3:5]
+        p = self.xyt[0:2]
+        psi = self.xyt[2]
 
-        self.F = np.identity(5)
+        dim = self.xyt.shape[0]
+        self.F = np.identity(dim)
         self.F[0:2, 2] = self.J @ rot_mtx(psi) @ v * self.dt # TODO
 
-        self.G = np.zeros((5, 3))
+        self.G = np.zeros((dim, 3))
         self.G[0:2, 0:2] = self.dt * rot_mtx(psi)
         self.G[2, 2] = self.dt
-
-        self.Q = np.identity(3)
-        self.Q[0:2, 0:2] = self.Q[0:2, 0:2] * VT_SIGMA**2
-        self.Q[2, 2] = self.Q[2, 2] * WT_SIGMA**2
-
-        Ak = np.identity(2)
-        if Flag3:
-            Ak[0:2, 0] = pt - p
-
-        Ti = np.identity(5)
-        Ti[0:2, 2] = self.J @ p
-        Ti[3:5, 0:2] = np.identity(2)
-        Ti[3:5, 2] = self.J @ pt
-        Ti[3:5, 3:5] = Ak
 
         # state prediction
         p = p + self.dt * rot_mtx(psi) @ v
         psi = psi + self.dt * w
 
-        Aki = np.identity(2)
-        if Flag3:
-            Aki[0, 0] = 1 / (pt[0] - p[0])
-            Aki[1, 0] = - (pt[1] - p[1]) / (pt[0] - p[0])
-
-        Ts = np.identity(5)
-        Ts[0:2, 2] = - self.J @ p
-        Ts[3:5, 0:2] = -Aki
-        Ts[3:5, 2] = -Aki @ self.J @ (pt - p)
-        Ts[3:5, 3:5] = Aki
-
-        # print(Ts)
-
-        self.robot_system.xyt[0:2] = p
-        self.robot_system.xyt[2] = psi
-        self.robot_system.xyt[3:5] = pt
-
-        self.F = Ts @ self.F @ Ti
-        self.G = Ts @ self.G
- 
-        self.Fk = self.F @ self.Fk
-
-        # print(self.F)
-
         # covariance prediction
         self.cov = self.F @ self.cov @ self.F.T + self.G @ self.Q @ self.G.T
-    
-        Ak = np.identity(2)
-        if Flag3:
-            Ak[0:2, 0] = pt - p
 
-        Ti = np.identity(5)
-        Ti[0:2, 2] = self.J @ p
-        Ti[3:5, 0:2] = np.identity(2)
-        Ti[3:5, 2] = self.J @ pt
-        Ti[3:5, 3:5] = Ak
-
-        self.robot_system.cov = Ti @ self.cov @ Ti.T
-
+        self.xyt[0:2] = p
+        self.xyt[2] = psi
+        
+        self.robot_system.xyt = self.xyt[0:3]
+        self.robot_system.cov = self.cov[0:3, 0:3]
+            
         end_time = time.time()
         
         self.running_time += (end_time - start_time)
-
+    
     def absolute_observation(self, t):
         dataset = self.dataset
         
         start_time = time.time()
 
         idx = int(t / self.dt)
+      
+        # print(idx, len(dataset['measurement']))  
+        landmark_observation = dataset['measurement'][idx]
         
-        bearing = dataset['measurement'][idx]
+        # observation
+        observation_num = len(landmark_observation)
 
-        p = self.robot_system.xyt[0:2]
-        pt = self.robot_system.xyt[3:5]
-
-        r_p = pt - p
-
-        z_hat = m.atan2(r_p[1], r_p[0])
-        z = m.atan2(m.sin(bearing), m.cos(bearing))
+        if observation_num == 0:
+            return
         
-        dz = z - z_hat
-        dz = m.atan2(m.sin(dz), m.cos(dz))
+        self.landmark_seq_in_state = []
+        self.landmark_seq_no_in_state = []
 
-        # construct measurement matrix
-        H = np.zeros((1, 5))
+        landmark_observation_id = []
+                
+        for i in range(len(landmark_observation)):
+            if landmark_observation[i]['id'] in self.landmark_seq:
+                self.landmark_seq_in_state.append(landmark_observation[i])
+            else:
+                self.landmark_seq_no_in_state.append(landmark_observation[i])
 
-        H[0, 0:2] = r_p.T @ self.J / (r_p[0]**2 + r_p[1]**2)        
-        H[0, 3:5] = - r_p.T @ self.J / (r_p[0]**2 + r_p[1]**2)
-        H[0, 2] = -1
+            landmark_observation_id.append(landmark_observation[i]['id'])
 
-        Ak = np.identity(2)
-        if Flag3:
-            Ak[0:2, 0] = pt - p
+        # print(self.landmark_seq, landmark_observation_id)
+            
+        self.landmark_seq_no_obs = []
 
-        Ti = np.identity(5)
-        Ti[0:2, 2] = self.J @ p
-        Ti[3:5, 0:2] = np.identity(2)
-        Ti[3:5, 2] = self.J @ pt
-        Ti[3:5, 3:5] = Ak
-
-        H = H @ Ti
-
-        # print(H)
+        for i in range(len(self.landmark_seq)):
+            if self.landmark_seq[i] in landmark_observation_id:
+                pass
+            else:
+                self.landmark_seq_no_obs.append(self.landmark_seq[i])
         
-        self.Wk = self.Wk + (H @ self.Fk).T @ (H @ self.Fk)
+        dim = self.xyt.shape[0]
+        
+        # state update
+        if len(self.landmark_seq_in_state) > 0:
+            observation_num = len(self.landmark_seq_in_state)
+            
+            SEQ_UPDATE = True
 
-        cov = self.cov
+            if SEQ_UPDATE:
+                # sequential update
+                for i in range(observation_num):
+                    idx = self.landmark_seq_in_state[i]['id']
+                    ids = self.landmark_seq.index(idx)
 
-        innovation_inv = 1.0 / (H @ cov @ H.T + BEARING_VAR)
+                    z_hat = rot_mtx(self.xyt[2]).T @ (self.xyt[ids*2+3:(ids+1)*2+3] - self.xyt[0:2])
+                    z = self.landmark_seq_in_state[i]['obs']
+                    dz = z - z_hat
+                    
+                    # print(z_hat, z, dz)
 
-        Kalman_gain = cov @ H.T * innovation_inv
+                    H = np.zeros((2, dim))
+                    H[:, 2] = - self.J @ (self.xyt[2*ids+3:2*(ids+1)+3] - self.xyt[0:2])
+                    H[:, 0:2] = - np.identity(2)
+                    H[:, 2*ids+3:2*(ids+1)+3] = np.identity(2)
 
-        self.cov = (np.identity(5) - Kalman_gain @ H) @ cov
+                    H = rot_mtx(self.xyt[2]).T @ H 
 
-        Ak = np.identity(2)
-        if Flag3:
-            Ak[0:2, 0] = pt - p
+                    innovation_inv = np.linalg.inv(H @ self.cov @ H.T + LIDAR_SIGMA**2 * np.identity(2))
+                    kalman_gain = self.cov @ H.T @ innovation_inv
+                    
+                    tk_p = np.identity(dim)
+                    tk_p[0:2, 2] = self.J @ self.xyt[0:2]
+                    for i in range(len(self.landmark_seq)):
+                        tk_p[3+2*i:3+2*(i+1), 2] = self.J @ self.xyt[3+2*i:3+2*(i+1)]  
+                        
+                    self.xyt = self.xyt + kalman_gain @ dz
+                    self.cov = (np.identity(dim) - kalman_gain @ H) @ self.cov
+                    
+                    tk_c = np.identity(dim)
+                    tk_c[0:2, 2] = self.J @ self.xyt[0:2]
+                    for i in range(len(self.landmark_seq)):
+                        tk_c[3+2*i:3+2*(i+1), 2] = self.J @ self.xyt[3+2*i:3+2*(i+1)] 
+                    
+                    delta_t = tk_c @ np.linalg.inv(tk_p)
+                    
+                    self.cov = delta_t @ self.cov @ delta_t.T                  
+            else:
+                # batch update
+                H = np.zeros((2*observation_num, dim))
+                dz = np.zeros((2*observation_num, ))
 
-        Ti = np.identity(5)
-        Ti[0:2, 2] = self.J @ p
-        Ti[3:5, 0:2] = np.identity(2)
-        Ti[3:5, 2] = self.J @ pt
-        Ti[3:5, 3:5] = Ak
+                for i in range(observation_num):
+                    idx = self.landmark_seq_in_state[i]['id']
+                    ids = self.landmark_seq.index(idx)
 
-        self.robot_system.cov = Ti @ self.cov @ Ti.T
+                    z_hat = rot_mtx(self.xyt[2]).T @ (self.xyt[ids*2+3:(ids+1)*2+3] - self.xyt[0:2])
+                    z = self.landmark_seq_in_state[i]['obs']
+                    dz[2*i:2*(i+1)] = z - z_hat
+                    
+                    H[2*i:2*(i+1), 2] = - self.J @ (self.xyt[2*ids+3:2*(ids+1)+3] - self.xyt[0:2])
+                    H[2*i:2*(i+1), 0:2] = - np.identity(2)
+                    H[2*i:2*(i+1), 2*ids+3:2*(ids+1)+3] = np.identity(2)
+                    H[2*i:2*(i+1), :] = rot_mtx(self.xyt[2]).T @ H[2*i:2*(i+1), :]
+            
+                innovation_inv = np.linalg.inv(H @ self.cov @ H.T + LIDAR_SIGMA**2 * np.identity(2*observation_num))
+                kalman_gain = self.cov @ H.T @ innovation_inv
+                self.xyt = self.xyt + kalman_gain @ dz
+                self.cov = (np.identity(dim) - kalman_gain @ H) @ self.cov
+                
+        # state augment    
+        if len(self.landmark_seq_no_in_state) > 0:
+            n_observation_num = len(self.landmark_seq_no_in_state)
+            
+            bX = self.xyt
+            self.xyt = np.zeros((dim + 2*n_observation_num, ))
+            self.xyt[0:dim] = bX
+             
+            bP = self.cov
+            self.cov = np.identity(dim + 2*n_observation_num)
+            self.cov[0:dim, 0:dim] = bP
 
-        self.robot_system.xyt = self.robot_system.xyt + Ti @ Kalman_gain[:, 0] * dz
+            for i in range(len(self.landmark_seq_no_in_state)):
+                self.landmark_seq.append(self.landmark_seq_no_in_state[i]['id'])
+                
+                obs_p = self.landmark_seq_no_in_state[i]['obs']
+                
+                self.xyt[i*2+dim:(i+1)*2+dim] = rot_mtx(self.xyt[2]) @ obs_p + self.xyt[0:2]
 
+                HL = np.hstack((np.identity(2), (self.J @ rot_mtx(self.xyt[2]) @ obs_p).reshape(2, 1)))
+                HR = rot_mtx(self.xyt[2])
+
+                self.cov[i*2+dim:(i+1)*2+dim, i*2+dim:(i+1)*2+dim] = HL @ self.cov[0:3, 0:3] @ HL.T + \
+                                                                HR @ (LIDAR_SIGMA **2 * np.identity(2)) @ HR.T
+                
+                self.cov[i*2+dim:(i+1)*2+dim, 0:3] = HL @ self.cov[0:3, 0:3]
+                self.cov[0:3, i*2+dim:(i+1)*2+dim] = self.cov[i*2+dim:(i+1)*2+dim, 0:3].T
+
+                self.cov[i*2+dim:(i+1)*2+dim, 3:i*2+dim] = HL @ self.cov[0:3, 3:i*2+dim]
+                self.cov[3:i*2+dim, i*2+dim:(i+1)*2+dim] = self.cov[i*2+dim:(i+1)*2+dim, 3:i*2+dim].T
+
+        if SLAM_SIMULATION:
+            pass
+        else:
+            # state marginalize
+            if len(self.landmark_seq_no_obs) > 0:
+                dim = self.xyt.shape[0]
+                
+                t_m = np.zeros((dim - len(self.landmark_seq_no_obs)*2, dim))
+                t_m[0:3, 0:3] = np.identity(3)
+                id_obs = 0
+                landmark_seq_back = []
+
+                for i in range(len(self.landmark_seq)):
+                    if self.landmark_seq[i] in self.landmark_seq_no_obs:
+                        pass
+                    else:
+                        t_m[3+2*id_obs:3+2*(id_obs+1), 3+2*i:3+2*(i+1)] = np.identity(2)
+                        id_obs = id_obs + 1
+                        landmark_seq_back.append(self.landmark_seq[i])
+                
+                self.landmark_seq = landmark_seq_back
+                
+                self.xyt = t_m @ self.xyt
+                self.cov = t_m @ self.cov @ t_m.T
+        
+        self.robot_system.xyt = self.xyt[0:3]        
+        self.robot_system.cov = self.cov[0:3, 0:3]
+
+        #print(self.robot_system.xyt)
+        #print(self.robot_system.cov)
+        #print('----end----')
+        
         end_time = time.time()
         self.running_time += (end_time - start_time)
-
+        
     def save_est(self, t):
         px = self.robot_system.xyt[0]
         py = self.robot_system.xyt[1]
         
         psi = self.robot_system.xyt[2]
 
-        ptx = self.robot_system.xyt[3]
-        pty = self.robot_system.xyt[4]
-
         cov = self.robot_system.cov
 
-        self.robot_system.history.append({'px': np.copy(px), 'py': np.copy(py), 'psi': np.copy(psi), 'ptx': np.copy(ptx), 'pty': np.copy(pty), 'cov': np.copy(cov)})
+        self.robot_system.history.append({'px': px, 'py': py, 'psi': psi, 'cov': np.copy(cov)})
 
     def run(self):
         # initialize time
-        t = self.dt
+        t = 0
 
-        while t <= self.duration: 
+        while t < self.duration: 
 
           # prediction (time propagation) step
           self.prediction(t)
@@ -227,4 +281,4 @@ class T_EKF():
           t = t + self.dt
         
         if PRINT_TIME:
-          print('tekf duration: {} / rank: {} / trace: {} \n'.format(self.running_time / self.duration, np.linalg.matrix_rank(self.Wk), np.trace(self.Wk)))
+          print('tekf duration: {} \n'.format(self.running_time / self.duration))

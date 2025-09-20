@@ -12,6 +12,7 @@ from pathlib import Path
 
 from bekf import B_EKF
 from sekf import S_EKF
+from tekf import T_EKF
 from nekf import N_EKF
 from idekf import ID_EKF
 from schur import SCHUR_EKF
@@ -263,6 +264,11 @@ if __name__ == '__main__':
                     IDEKF = ID_EKF(robot_system, dataset)
                     IDEKF.run()
                     robot_system = IDEKF.robot_system
+                elif alg == 'tekf':
+                    robot_system = CentralizedSystem(xyt_0, team_settings)
+                    TEKF = T_EKF(robot_system, dataset)
+                    TEKF.run()
+                    robot_system = TEKF.robot_system
                 elif alg == 'nekf':
                     robot_system = CentralizedSystem(xyt_0, team_settings)
                     NEKF = N_EKF(robot_system, dataset)

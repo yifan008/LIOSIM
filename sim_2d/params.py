@@ -1,5 +1,5 @@
-VT_SIGMA = 0.1
-WT_SIGMA = 0.04
+VT_SIGMA = 0.002
+WT_SIGMA = 0.001
 LIDAR_SIGMA = 0.1 
 
 ITER_NUM = 1
@@ -17,6 +17,6 @@ DRAW_TRAJECTORY = False
 
 SLAM_SIMULATION = False
 
-algorithms = ['bekf', 'sekf', 'nekf', 'idekf', 'schmidt']
+algorithms = ['bekf', 'sekf', 'nekf', 'schmidt', 'tekf', 'ciekf', 'schur']
 
-TIME_MARK = '2025-09-20_15-04-18'
+TIME_MARK = '2025-09-20_15-49-56'
