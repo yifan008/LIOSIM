@@ -15,6 +15,8 @@ DRAW_BOUNDS = True
 
 DRAW_TRAJECTORY = False
 
-algorithms = ['bekf', 'sekf', 'nekf', 'idekf', 'schmidt', 'ciekf', 'iciekf']  # 'bda'
+SLAM_SIMULATION = False
 
-TIME_MARK = '2025-09-19_18-20-48'
+algorithms = ['bekf', 'sekf', 'nekf', 'idekf', 'schmidt']
+
+TIME_MARK = '2025-09-20_15-04-18'

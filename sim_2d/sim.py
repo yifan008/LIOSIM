@@ -159,7 +159,7 @@ class sim_mag:
 
                 dist = np.linalg.norm(pt - p)
                 
-                if dist < 2.7:
+                if dist < 1.2:
                     p_r = rot_mtx(psi).T @ (pt - p) + self.lidar_sigma * np.random.randn(2, )
                     landmark_observation.append({'obs': p_r, 'id': i})
             

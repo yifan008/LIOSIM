@@ -196,9 +196,30 @@ class SCHMIDT_EKF():
                 # self.cov[i*2+dim:(i+1)*2+dim, 3:i*2+dim] = HL @ self.cov[0:3, 3:i*2+dim]
                 # self.cov[3:i*2+dim, i*2+dim:(i+1)*2+dim] = self.cov[i*2+dim:(i+1)*2+dim, 3:i*2+dim].T
 
-        # state marginalize
-        if len(self.landmark_seq_no_obs) > 0:
-            pass      
+        if SLAM_SIMULATION:
+            pass
+        else:
+            # state marginalize
+            if len(self.landmark_seq_no_obs) > 0:
+                dim = self.xyt.shape[0]
+                
+                t_m = np.zeros((dim - len(self.landmark_seq_no_obs)*2, dim))
+                t_m[0:3, 0:3] = np.identity(3)
+                id_obs = 0
+                landmark_seq_back = []
+
+                for i in range(len(self.landmark_seq)):
+                    if self.landmark_seq[i] in self.landmark_seq_no_obs:
+                        pass
+                    else:
+                        t_m[3+2*id_obs:3+2*(id_obs+1), 3+2*i:3+2*(i+1)] = np.identity(2)
+                        id_obs = id_obs + 1
+                        landmark_seq_back.append(self.landmark_seq[i])
+                
+                self.landmark_seq = landmark_seq_back
+                
+                self.xyt = t_m @ self.xyt
+                self.cov = t_m @ self.cov @ t_m.T
         
         self.robot_system.xyt = self.xyt[0:3]        
         self.robot_system.cov = self.cov[0:3, 0:3]
