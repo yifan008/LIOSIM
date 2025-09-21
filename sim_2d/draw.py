@@ -41,10 +41,10 @@ if __name__ == '__main__':
     # t = time.strftime("%Y-%m-%d %H:%M:%S")
     t = TIME_MARK
 
-    color_tables = {'bekf':'blue', 'idekf':'green', 'schur':'hotpink', 'nekf':'cyan', 'tekf':'red', 'sekf':'orange', 'ciekf':'Moccasin', 'odom':'yellow', 'gt':'purple', 'kdl2':'Moccasin', 'schmidt':'navy'}
-    marker_tables = {'bekf':'o', 'idekf':'h', 'schur':'s', 'nekf':'^', 'tekf':'p', 'sekf':'3', 'ciekf':'*', 'gt':'2', 'odom':'o', 'schmidt':'s', 'ukf':'*', 'kdl2': 's'}
-    label_tables = {'bekf':'BatchEKF', 'idekf':'IDEKF', 'schur':'SCHUR', 'nekf':'NEKF', 'tekf':'T-EKF', 'ciekf':'CIEKF', 'schmidt':'SCHMIDT', 'odom':'ODOM', 'sekf':'SeqEKF', 'gt':'GT'} 
-    style_table = {'bekf':'--', 'idekf':'--', 'schur':'-.', 'ciekf':'-.', 'tekf':':', 'nekf':':', 'sekf':':', 'schmidt':':', 'odom':':'}
+    color_tables = {'bekf':'blue', 'idekf':'green', 'schur':'hotpink', 'nekf':'cyan', 'tekf':'red', 'sekf':'orange', 'ciekf':'Moccasin', 'odom':'yellow', 'gt':'purple', 'iciekf':'brown', 'schmidt':'navy'}
+    marker_tables = {'bekf':'o', 'idekf':'h', 'schur':'s', 'nekf':'^', 'tekf':'p', 'sekf':'3', 'ciekf':'*', 'gt':'2', 'odom':'o', 'schmidt':'s', 'ukf':'*', 'iciekf': 's'}
+    label_tables = {'bekf':'BatchEKF', 'idekf':'IDEKF', 'schur':'SCHUR', 'nekf':'NEKF', 'tekf':'TEKF', 'ciekf':'CIEKF', 'schmidt':'SCHMIDT', 'iciekf':'ICIEKF', 'sekf':'SeqEKF', 'gt':'GT'} 
+    style_table = {'bekf':'--', 'idekf':'--', 'schur':'-.', 'ciekf':'-.', 'tekf':':', 'nekf':':', 'sekf':':', 'schmidt':':', 'iciekf':':'}
 
     iter_num = ITER_NUM
 

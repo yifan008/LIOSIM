@@ -9,7 +9,7 @@ from robot_system import *
 
 from scipy.optimize import fminbound
 
-class ICI_EKF():
+class CI_EIF():
     def __init__(self, robot_system, dataset):
         self.robot_system = robot_system
         self.dataset = dataset
@@ -169,17 +169,12 @@ class ICI_EKF():
                     info_fm = info_f + info_m
                     info_cov_fm = info_cov_f + info_cov_m
                     
-                    omega = self.optimize_omega('det', info_cov_xm, info_cov_fm)
+                    omega = self.optimize_omega('trace', info_cov_xm, info_cov_fm)
                     # omega = 0.1
                     # print(omega)
-                    Gamma = info_cov_xm @ np.linalg.inv(omega * info_cov_xm + (1-omega) * info_cov_fm) @ info_cov_fm
-                    Gamma_f = info_cov_xm @ np.linalg.inv(omega * info_cov_xm + (1-omega) * info_cov_fm) 
-                    Gamma_x = info_cov_fm @ np.linalg.inv(omega * info_cov_xm + (1-omega) * info_cov_fm) 
-                    Km = np.identity(5) - (1-omega) * Gamma_x
-                    Lm = np.identity(5) - omega * Gamma_f
                     
-                    cov_joint = np.linalg.inv(info_cov_xm + info_cov_fm - Gamma)
-                    state_joint = cov_joint @ (Km @ info_xm + Lm @ info_fm)
+                    cov_joint = np.linalg.inv(omega * info_cov_xm + (1-omega) * info_cov_fm)
+                    state_joint = cov_joint @ (omega * info_xm + (1-omega) * info_fm)
                     
                     self.xyt[0:3] = state_joint[0:3]
                     self.cov[0:3, 0:3] = cov_joint[0:3, 0:3]
@@ -256,9 +251,7 @@ class ICI_EKF():
     def optimize_omega(self, criterion, info_cov_xm, info_cov_fm):
         def optimize_fn(omega):
                     
-            Gamma = info_cov_xm @ np.linalg.inv(omega * info_cov_xm + (1-omega) * info_cov_fm) @ info_cov_fm
-    
-            cov_joint = np.linalg.inv(info_cov_xm + info_cov_fm - Gamma)
+            cov_joint = np.linalg.inv(omega * info_cov_xm + (1-omega) * info_cov_fm)
         
             P = cov_joint[0:3, 0:3]
             
@@ -299,4 +292,4 @@ class ICI_EKF():
           t = t + self.dt
         
         if PRINT_TIME:
-          print('iciekf duration: {} \n'.format(self.running_time / self.duration))
+          print('cieif duration: {} \n'.format(self.running_time / self.duration))
