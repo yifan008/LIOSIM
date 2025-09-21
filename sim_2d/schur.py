@@ -5,6 +5,8 @@ import numpy as np
 import time
 import math as m
 
+from scipy.optimize import fminbound
+
 from robot_system import *
 
 class SCHUR_EKF():
@@ -126,7 +128,7 @@ class SCHUR_EKF():
         if len(self.landmark_seq_in_state) > 0:
             observation_num = len(self.landmark_seq_in_state)
             
-            SEQ_UPDATE = False
+            SEQ_UPDATE = True
 
             if SEQ_UPDATE:
                 # sequential update
@@ -162,6 +164,16 @@ class SCHUR_EKF():
                     kalman_gain = self.cov[0:3, 0:3] @ H.T @ innovation_inv
                     self.xyt[0:3] = self.xyt[0:3] + kalman_gain @ dz_
                     self.cov[0:3, 0:3] = (np.identity(3) - kalman_gain @ H) @ self.cov[0:3, 0:3]
+                    
+                    R = C3 @ (self.cov[ids*2+3:(ids+1)*2+3, ids*2+3:(ids+1)*2+3] + np.identity(2) * LIDAR_SIGMA**2) @ C3.T
+                    
+                    info = C2 @ np.linalg.inv(R) @ (b2 + C2.T @ self.xyt[0:3])
+                    info_cov = C2 @ np.linalg.inv(R) @ C2.T
+                    
+                    omega = self.optimize_omega('trace', np.linalg.inv(self.cov[0:3, 0:3]), info_cov)
+
+                    self.cov[0:3, 0:3] = np.linalg.inv(omega * np.linalg.inv(self.cov[0:3, 0:3]) + (1-omega) * info_cov)
+                    self.xyt[0:3] = self.cov[0:3, 0:3] @ (omega * np.linalg.inv(self.cov[0:3, 0:3]) @ self.xyt[0:3] + (1-omega) * info)
             else:
                 # batch update
                 # print('batch update')
@@ -275,7 +287,21 @@ class SCHUR_EKF():
         
         end_time = time.time()
         self.running_time += (end_time - start_time)
-        
+
+    def optimize_omega(self, criterion, info_a, info_b):
+        def optimize_fn(omega):
+                       
+            P = np.linalg.inv(omega * info_a + (1 - omega) *  info_b)
+
+            if criterion == 'det':
+                return np.log(np.linalg.det(P))
+            elif criterion == 'trace':
+                return np.trace(P)
+            else:
+                pass
+
+        return fminbound(optimize_fn, 0, 1)
+    
     def save_est(self, t):
         px = self.robot_system.xyt[0]
         py = self.robot_system.xyt[1]
