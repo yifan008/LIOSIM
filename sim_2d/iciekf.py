@@ -5,11 +5,11 @@ import numpy as np
 import time
 import math as m
 
-from scipy.optimize import fminbound
-
 from robot_system import *
 
-class DEIF_EKF():
+from scipy.optimize import fminbound
+
+class ICI_EKF():
     def __init__(self, robot_system, dataset):
         self.robot_system = robot_system
         self.dataset = dataset
@@ -61,7 +61,7 @@ class DEIF_EKF():
 
         self.F = np.identity(3)
         self.F[0:2, 2] = self.J @ rot_mtx(psi) @ v * self.dt # TODO
-
+        
         self.G = np.zeros((3, 3))
         self.G[0:2, 0:2] = self.dt * rot_mtx(psi)
         self.G[2, 2] = self.dt
@@ -71,6 +71,7 @@ class DEIF_EKF():
         psi = psi + self.dt * w
 
         # covariance prediction
+        # self.cov = self.F @ self.cov @ self.F.T + self.G @ self.Q @ self.G.T
         self.cov[0:3, 0:3] = self.F @ self.cov[0:3, 0:3] @ self.F.T + self.G @ self.Q @ self.G.T
 
         self.xyt[0:2] = p
@@ -140,33 +141,52 @@ class DEIF_EKF():
                     z = self.landmark_seq_in_state[i]['obs']
                     dz = z - z_hat
                     
-                    # print(z_hat, z, dz)
-
-                    Hx = np.zeros((2, 3))
+                    Hx = np.zeros((2, 5))
                     Hx[:, 2] = - self.J @ (self.xyt[2*ids+3:2*(ids+1)+3] - self.xyt[0:2])
                     Hx[:, 0:2] = - np.identity(2)
+                    Hx[:, 3:5] = np.identity(2)
                     Hx = rot_mtx(self.xyt[2]).T @ Hx 
                     
-                    Hf = rot_mtx(self.xyt[2]).T
+                    info_m = Hx.T @ np.linalg.inv(LIDAR_SIGMA**2 * np.identity(2)) @ (dz + Hx[:, 0:3] @ self.xyt[0:3] + Hx[:, 3:5] @ self.xyt[ids*2+3:(ids+1)*2+3])
+                    info_cov_m = Hx.T @ np.linalg.inv(LIDAR_SIGMA**2 * np.identity(2)) @ Hx
 
                     cov_x = self.cov[0:3, 0:3]
                     cov_f = self.cov[ids*2+3:(ids+1)*2+3, ids*2+3:(ids+1)*2+3]
+
+                    info_cov_x = np.zeros((5, 5))
+                    info_cov_x[0:3, 0:3] = np.linalg.inv(cov_x)
+                    info_x = np.zeros((5, ))
+                    info_x[0:3] = np.linalg.inv(cov_x) @ self.xyt[0:3]
                     
-                    R = np.identity(2) * LIDAR_SIGMA**2 + Hf @ cov_f @ Hf.T
-
-                    info = Hx.T @ np.linalg.inv(R) @ (dz + Hx @ self.xyt[0:3])
-                    info_cov = Hx.T @ np.linalg.inv(R) @ Hx
-                                        
-                    omega = self.optimize_omega('trace', np.linalg.inv(cov_x), info_cov)
-                                        
-                    self.cov[0:3, 0:3] = np.linalg.inv(omega * np.linalg.inv(cov_x) + (1-omega) * info_cov)
-                    self.xyt[0:3] = self.cov[0:3, 0:3] @ (omega * np.linalg.inv(cov_x) @ self.xyt[0:3] + (1-omega) * info)
-
-                    # print(omega, self.xyt[0:3])
+                    info_cov_f = np.zeros((5, 5))
+                    info_cov_f[3:5, 3:5] = np.linalg.inv(cov_f)
+                    info_f = np.zeros((5, ))    
+                    info_f[3:5] = np.linalg.inv(cov_f) @ self.xyt[ids*2+3:(ids+1)*2+3]
+                    
+                    info_xm = info_x + info_m
+                    info_cov_xm = info_cov_x + info_cov_m
+                    
+                    info_fm = info_f + info_m
+                    info_cov_fm = info_cov_f + info_cov_m
+                    
+                    omega = self.optimize_omega('det', info_cov_xm, info_cov_fm)
+                    # omega = 0.1
+                    # print(omega)
+                    Gamma = info_cov_xm @ np.linalg.inv(omega * info_cov_xm + (1-omega) * info_cov_fm) @ info_cov_fm
+                    Gamma_f = info_cov_xm @ np.linalg.inv(omega * info_cov_xm + (1-omega) * info_cov_fm) 
+                    Gamma_x = info_cov_fm @ np.linalg.inv(omega * info_cov_xm + (1-omega) * info_cov_fm) 
+                    Km = np.identity(5) - (1-omega) * Gamma_x
+                    Lm = np.identity(5) - omega * Gamma_f
+                    
+                    cov_joint = np.linalg.inv(info_cov_xm + info_cov_fm - Gamma)
+                    state_joint = cov_joint @ (Km @ info_xm + Lm @ info_fm)
+                    
+                    self.xyt[0:3] = state_joint[0:3]
+                    self.cov[0:3, 0:3] = cov_joint[0:3, 0:3]
             else:
                 # batch update
                 pass
-                
+            
         # state augment    
         if len(self.landmark_seq_no_in_state) > 0:
             n_observation_num = len(self.landmark_seq_no_in_state)
@@ -232,12 +252,16 @@ class DEIF_EKF():
         
         end_time = time.time()
         self.running_time += (end_time - start_time)
-
-    def optimize_omega(self, criterion, info_a, info_b):
+    
+    def optimize_omega(self, criterion, info_cov_xm, info_cov_fm):
         def optimize_fn(omega):
-                       
-            P = np.linalg.inv(omega * info_a + (1 - omega) *  info_b)
-
+                    
+            Gamma = info_cov_xm @ np.linalg.inv(omega * info_cov_xm + (1-omega) * info_cov_fm) @ info_cov_fm
+    
+            cov_joint = np.linalg.inv(info_cov_xm + info_cov_fm - Gamma)
+        
+            P = cov_joint
+            
             if criterion == 'det':
                 return np.log(np.linalg.det(P))
             elif criterion == 'trace':
@@ -246,7 +270,7 @@ class DEIF_EKF():
                 pass
 
         return fminbound(optimize_fn, 0, 1)
-    
+
     def save_est(self, t):
         px = self.robot_system.xyt[0]
         py = self.robot_system.xyt[1]
@@ -275,4 +299,4 @@ class DEIF_EKF():
           t = t + self.dt
         
         if PRINT_TIME:
-          print('deif duration: {} \n'.format(self.running_time / self.duration))
+          print('iciekf duration: {} \n'.format(self.running_time / self.duration))

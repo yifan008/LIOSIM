@@ -18,6 +18,7 @@ from idekf import ID_EKF
 from schur import SCHUR_EKF
 from ciekf import CI_EKF
 from deif import DEIF_EKF
+from iciekf import ICI_EKF
 from schmidt import SCHMIDT_EKF
 
 from robot_system import *
@@ -289,6 +290,11 @@ if __name__ == '__main__':
                     DEIFEKF = DEIF_EKF(robot_system, dataset)
                     DEIFEKF.run()
                     robot_system = DEIFEKF.robot_system
+                elif alg == 'iciekf':
+                    robot_system = CentralizedSystem(xyt_0, team_settings)
+                    ICIEKF = ICI_EKF(robot_system, dataset)
+                    ICIEKF.run()
+                    robot_system = ICIEKF.robot_system
                 elif alg == 'schmidt':
                     robot_system = CentralizedSystem(xyt_0, team_settings)
                     SCHMIDT_EKF = SCHMIDT_EKF(robot_system, dataset)

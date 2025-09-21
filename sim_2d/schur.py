@@ -171,9 +171,10 @@ class SCHUR_EKF():
                     info_cov = C2 @ np.linalg.inv(R) @ C2.T
                     
                     omega = self.optimize_omega('trace', np.linalg.inv(self.cov[0:3, 0:3]), info_cov)
-
-                    self.cov[0:3, 0:3] = np.linalg.inv(omega * np.linalg.inv(self.cov[0:3, 0:3]) + (1-omega) * info_cov)
-                    self.xyt[0:3] = self.cov[0:3, 0:3] @ (omega * np.linalg.inv(self.cov[0:3, 0:3]) @ self.xyt[0:3] + (1-omega) * info)
+                    # print('omega: {} \n'.format(omega))
+                    # print('info_cov: {} \n'.format(info_cov))
+                    # self.cov[0:3, 0:3] = np.linalg.inv(omega * np.linalg.inv(self.cov[0:3, 0:3]) + (1.0-omega) * info_cov)
+                    # self.xyt[0:3] = self.cov[0:3, 0:3] @ (omega * np.linalg.inv(self.cov[0:3, 0:3]) @ self.xyt[0:3] + (1-omega) * info)
             else:
                 # batch update
                 # print('batch update')
